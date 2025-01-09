@@ -168,6 +168,7 @@ $.getScript(
                                             ?.match(twSDK.coordsRegex)[0];
 
                                         let villageData = [];
+                                        let debugTroopData = {}; // Debug object
 
                                         _this
                                             .find('td')
@@ -186,6 +187,12 @@ $.getScript(
                                                 villageData.push(
                                                     parseInt(unitAmount)
                                                 );
+                                                
+                                                // Debug logging for troop collection
+                                                if (DEBUG) {
+                                                    const index = villageData.length - 1;
+                                                    debugTroopData[game_data.units[index]] = parseInt(unitAmount);
+                                                }
                                             });
 
                                         villageData = villageData.splice(
@@ -193,7 +200,7 @@ $.getScript(
                                             game_data.units.length
                                         );
 
-                                        let villageTroops = [];
+                                        let villageTroops = {};
                                         game_data.units.forEach(
                                             (unit, index) => {
                                                 villageTroops = {
@@ -202,6 +209,15 @@ $.getScript(
                                                 };
                                             }
                                         );
+
+                                        // Debug logging
+                                        if (DEBUG) {
+                                            console.debug('Village Troop Collection:', {
+                                                villageName: currentVillageName,
+                                                rawTroopData: debugTroopData,
+                                                processedTroops: villageTroops
+                                            });
+                                        }
 
                                         villagesData.push({
                                             villageId: currentVillageId,
@@ -939,9 +955,30 @@ $.getScript(
                 const villagePop = calculatePop(troops);
                 const realStackLimit = stackLimit * 1000;
 
+                // Debug logging for troop comparison
+                if (DEBUG) {
+                    console.debug('Village Stack Check:', {
+                        villageName: village.villageName,
+                        villageCoords: village.villageCoords,
+                        existingTroops: troops,
+                        requiredTroops: unitAmount,
+                        villagePop,
+                        stackLimit: realStackLimit
+                    });
+                }
+
                 let shouldAdd = false;
 
                 for (let [key, value] of Object.entries(unitAmount)) {
+                    // Debug logging for specific unit checks
+                    if (DEBUG) {
+                        console.debug(`Unit ${key} check:`, {
+                            required: value,
+                            existing: troops[key],
+                            needsMore: troops[key] < value
+                        });
+                    }
+
                     if (troops[key] < value) {
                         shouldAdd = true;
                     }
