@@ -856,51 +856,64 @@ $.getScript(
             let missingTroops = {};
             const nonScalingUnits = ['spy', 'heavy'];
             
-            // Add debug logging
-            if (DEBUG) {
-                console.debug('Calculate Missing Troops Input:', {
-                    troops,
-                    unitAmounts,
-                    distance,
-                    scaleDownPerField
-                });
-            }
+            console.log('=== Starting Missing Troops Calculation ===');
+            console.log('Input Parameters:', {
+                existingTroops: troops,
+                requiredAmounts: unitAmounts,
+                distance,
+                scaleDownPerField
+            });
 
-            distance = Math.max(0, distance - 1); // Ensure distance doesn't go negative
+            distance = Math.max(0, distance - 1);
+            console.log('Adjusted distance:', distance);
 
-            for (let [key, value] of Object.entries(unitAmounts)) {
-                // Convert values to numbers and validate
-                value = parseInt(value) || 0;
-                const currentTroops = parseInt(troops[key]) || 0;
+            for (let [unit, requiredAmount] of Object.entries(unitAmounts)) {
+                console.log(`\nCalculating for ${unit}:`);
                 
-                if (nonScalingUnits.includes(key)) {
+                // Convert and validate values
+                requiredAmount = parseInt(requiredAmount) || 0;
+                const currentTroops = parseInt(troops[unit]) || 0;
+                
+                console.log({
+                    unit,
+                    requiredAmount,
+                    currentTroopsInVillage: currentTroops
+                });
+
+                if (nonScalingUnits.includes(unit)) {
+                    console.log(`${unit} is a non-scaling unit - skipping`);
                     continue;
                 }
 
-                let troopsAfterScalingDown = value - (distance * scaleDownPerField * 1000);
-                
-                // Add debug logging
-                if (DEBUG) {
-                    console.debug(`Calculating for ${key}:`, {
-                        value,
-                        currentTroops,
-                        troopsAfterScalingDown,
-                        calculation: `${value} - (${distance} * ${scaleDownPerField} * 1000)`
-                    });
-                }
+                // Calculate scaled requirement
+                let troopsAfterScalingDown = requiredAmount - (distance * scaleDownPerField * 1000);
+                console.log('Scaling calculation:', {
+                    original: requiredAmount,
+                    reduction: `${distance} * ${scaleDownPerField} * 1000 = ${distance * scaleDownPerField * 1000}`,
+                    afterScaling: troopsAfterScalingDown
+                });
 
                 if (troopsAfterScalingDown > 0) {
-                    let troopsDifference = currentTroops - troopsAfterScalingDown;
-                    if (!isNaN(troopsDifference)) {
-                        missingTroops[key] = Math.abs(troopsDifference);
+                    let troopsDifference = troopsAfterScalingDown - currentTroops;
+                    console.log('Troops difference calculation:', {
+                        required: troopsAfterScalingDown,
+                        existing: currentTroops,
+                        difference: troopsDifference
+                    });
+
+                    if (troopsDifference > 0) {
+                        missingTroops[unit] = troopsDifference;
+                        console.log(`Adding to missing troops: ${unit}: ${troopsDifference}`);
+                    } else {
+                        console.log(`No additional ${unit} needed`);
                     }
+                } else {
+                    console.log(`Required amount after scaling is <= 0, skipping`);
                 }
             }
 
-            // Add debug logging
-            if (DEBUG) {
-                console.debug('Missing Troops Result:', missingTroops);
-            }
+            console.log('\nFinal missing troops calculation:', missingTroops);
+            console.log('=== End Missing Troops Calculation ===\n');
 
             return missingTroops;
         }
@@ -913,6 +926,13 @@ $.getScript(
             unitAmount,
             stackLimit
         ) {
+            console.log('=== Starting Village Stack Check ===');
+            console.log('Input Parameters:', {
+                requiredUnits: unitAmount,
+                stackLimit,
+                distance
+            });
+
             let playerVillages = playersData
                 .map((player) => {
                     const { villagesData } = player;
@@ -951,42 +971,44 @@ $.getScript(
             // filter villages by stack size
             let villagesThatNeedStack = [];
             villagesWithinRadius.forEach((village) => {
+                console.log(`\nChecking village: ${village.villageName} (${village.villageCoords})`);
+                
                 const { troops } = village;
+                console.log('Current troops in village:', troops);
+                
                 const villagePop = calculatePop(troops);
                 const realStackLimit = stackLimit * 1000;
-
-                // Debug logging for troop comparison
-                if (DEBUG) {
-                    console.debug('Village Stack Check:', {
-                        villageName: village.villageName,
-                        villageCoords: village.villageCoords,
-                        existingTroops: troops,
-                        requiredTroops: unitAmount,
-                        villagePop,
-                        stackLimit: realStackLimit
-                    });
-                }
+                
+                console.log('Village status:', {
+                    currentPop: villagePop,
+                    stackLimit: realStackLimit,
+                    belowLimit: villagePop < realStackLimit
+                });
 
                 let shouldAdd = false;
+                let missingUnits = {};
 
-                for (let [key, value] of Object.entries(unitAmount)) {
-                    // Debug logging for specific unit checks
-                    if (DEBUG) {
-                        console.debug(`Unit ${key} check:`, {
-                            required: value,
-                            existing: troops[key],
-                            needsMore: troops[key] < value
-                        });
-                    }
+                for (let [unit, requiredAmount] of Object.entries(unitAmount)) {
+                    const existingAmount = troops[unit] || 0;
+                    console.log(`${unit} check:`, {
+                        required: requiredAmount,
+                        existing: existingAmount,
+                        needsMore: existingAmount < requiredAmount
+                    });
 
-                    if (troops[key] < value) {
+                    if (existingAmount < requiredAmount) {
                         shouldAdd = true;
+                        missingUnits[unit] = requiredAmount - existingAmount;
                     }
                 }
 
-                if (villagePop < realStackLimit) {
-                    shouldAdd = true;
-                }
+                console.log('Village evaluation:', {
+                    shouldAdd,
+                    reason: shouldAdd ? 
+                        (villagePop < realStackLimit ? 'Below stack limit' : 'Missing required units') : 
+                        'Has required troops',
+                    missingUnits
+                });
 
                 if (shouldAdd) {
                     villagesThatNeedStack.push({
@@ -996,25 +1018,10 @@ $.getScript(
                 }
             });
 
-            villagesThatNeedStack.sort((a, b) => a.fieldsAway - b.fieldsAway);
+            console.log('\nFinal villages that need stacks:', villagesThatNeedStack.length);
+            console.log('=== End Village Stack Check ===\n');
 
-            let villagesObject = {};
-            let villagesArray = [];
-            villagesThatNeedStack.forEach((item) => {
-                const { villageId, fieldsAway } = item;
-                if (!villagesObject[villageId]) {
-                    villagesObject = {
-                        ...villagesObject,
-                        [villageId]: item,
-                    };
-                }
-            });
-
-            for (let [_, value] of Object.entries(villagesObject)) {
-                villagesArray.push(value);
-            }
-
-            return villagesArray;
+            return villagesThatNeedStack;
         }
 
         // Helper: Calculate total pop
